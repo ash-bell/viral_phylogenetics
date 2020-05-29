@@ -242,3 +242,48 @@ $ trimal -in viral.msa -out viral.afa -automated1
 
 $ iqtree -s viral.afa -bb 1000 -m MFP 
 ```
+7. Lets make the tree with raxml-ng. Here are some options:
+The tree you should use should be under {prefix}.raxml.bestTree
+
+```
+# Just make me a standard tree with bootstrappings
+$ raxml-ng --all --msa viral.afa --model GTR+G --prefix T3 --threads 1
+
+# make a quick tree to check its rough structure
+$ raxml-ng --search1 --msa viral.afa --model GTR+G --prefix T4 --threads 1 
+
+# make a tree with 50 random starting+most pasimonious trees, with 2000 rounds of bootstrapping 
+$ raxml-ng --all --msa viral.afa --model GTR+G --prefix T5 --threads 1 --tree pars{50},rand{50} --bs-trees 2000
+```
+7b. Because we are using a multi gene tree, genes can mutate and different rates #biology. Each gene may have mutations specific to them, therefore if we use the same model for all genes, this may be incorrect. To get around this, we partition up an MSA by genes, and run a model on each, combining the results after. IMPORTANT: This does not affect the structure of the tree drastically (if at all) so is not recomended, but I have included this just in case. To do this, you need to make a file like below. You may need to do some re-jiggling of the numbers if your MSA file has been trimmed.
+
+```
+$ for i in *_trm.msa; do echo $i $(awk 'NR%2==0' $i | head -n 1 | wc -c); done
+
+capsid_trm.msa 3946
+dna_pol_trm.msa 6764
+endonuclease_trm.msa 4153
+exonuclease_trm.msa 6332
+head_tail_trm.msa 5350
+helicase_trm.msa 5888
+rna_pol_trm.msa 6120
+tube_trm.msa 1933
+
+$ cat viral.part
+
+GTR+G+FO, capsid=1-3946
+GTR+G+FO, dna_pol=3947-10709
+GTR+G+FO, endonuclease=10710-14862
+GTR+G+FO, exonuclease=14863-21193
+GTR+G+FO, head_tail=21194-26542
+GTR+G+FO, helicase=26543-32430
+GTR+G+FO, rna_pol=32431-38549
+GTR+G+FO, tube=38550-40472
+```
+
+```
+$ raxml-ng --all --msa T1.raxml.reduced.phy --model viral.part --prefix PARTITION_MODEL --threads 16 --tree pars{50},rand{50} --bs-trees 1000
+```
+If you want to learn more about the options for RAxML, I highly recomend their [tutorial](https://github.com/amkozlov/raxml-ng/wiki/Tutorial)
+
+NOTE: If any of the raxml-ng commands fail, rerun the command, they have [checkpoints](https://github.com/amkozlov/raxml-ng/wiki/Advanced-Tutorial#checkpointing) and so your progess won't be lost. 
