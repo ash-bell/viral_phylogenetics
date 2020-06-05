@@ -192,7 +192,8 @@ $ raxml-ng --search1 --msa viral.msa --model GTR+G --prefix T4 --threads 1
 # make a tree with 50 random starting+most pasimonious trees, with 2000 rounds of bootstrapping 
 $ raxml-ng --all --msa viral.msa --model GTR+G --prefix T5 --threads 1 --tree pars{50},rand{50} --bs-trees 2000
 ```
-After the tree has been compiled, I would recomend [iTOL](https://itol.embl.de/) to view and edit the tree.
+After the tree has been compiled, I would recomend [iTOL](https://itol.embl.de/) to view and edit the tree. Here is an [example](https://github.com/ash-bell/viral_phylogenetics/blob/master/B5Lajw929RWmq9gODup2XQ.png) to how it should look.
+
 ---
 
 7b. Because we are using a multi gene tree, genes can mutate and different rates #biology. Each gene may have mutations specific to them, therefore if we use the same model for all genes, this may be incorrect. To get around this, we partition up an MSA by genes, and run a model on each, combining the results after. **IMPORTANT:** This does not affect the structure of the tree drastically (if at all) so is not recomended, but I have included this just in case. To do this, you need to make a file like below. You may need to do some re-jiggling of the numbers if your MSA file has been trimmed. **IMPORTANT:** If you are making a tree of organisms that are very closely related, you need the dev verion of [raxml-ng](https://github.com/amkozlov/raxml-ng/wiki/Installation#building-development-branch) 
