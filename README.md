@@ -140,13 +140,13 @@ $ for i in *global*; do egrep -v "#|//|^$" $i | sed -E -e 's/[[:blank:]]+/\n/g; 
 Now this provides the last oppertunity to trim MSAs before they are concatinated into one file. So we refined them with `muscle` and `trimal`
 
 ```
-$ for i in *_trm.msa; do muscle -in $i -out $(basename $i .msa).afa -maxiters 1000000; trimal -in $(basename $i .msa).afa -out $(basename $i .msa)_final.msa -automated1 -keepseqs; done
+$ for i in *_trm.msa; do muscle -in $i -out $(basename $i .msa).afa; trimal -in $(basename $i .msa).afa -out $(basename $i .msa)_final.msa -automated1 -keepseqs; done
 ```
 
 Then for every phage I have in my file of all phage genomes, remove the MSA of each gene for each phage, concatinate it into one long MSA and append the viral name to the top, then concat the files into one file.
 
 ```
-$ $ for i in *_trm_final.msa; do awk '/^>/ {printf("\n%s\n",$0);next; } { printf("%s",$0);}  END {printf("\n");}' $i > $(basename $i .msa).afa; done
+$ for i in *_trm_final.msa; do awk '/^>/ {printf("\n%s\n",$0);next; } { printf("%s",$0);}  END {printf("\n");}' $i > $(basename $i .msa).afa; done # convert multi-contig fasta into one contig
 
 $ for i in $(grep ">" SAR11_phage.faa); do MSA=$(grep $i -A 1 -h *_trm_final.afa | sed 's/^--$//g; /^$/d' | awk 'NR%2==0' ORS=''); echo $i$'\n'$MSA >> viral.msa; done
 ```
@@ -174,7 +174,7 @@ $ raxml-ng --parse --msa viral.msa --model LG+G8+F --prefix T2 --data-type AA
 6b. Other alternatives include `muscle` which can trim and refine your MSA or you can use `trimal`. You could also use IQ-TREE to make your phylogenetic tree. 
 
 ```
-$ muscle -in viral.msa -out viral.afa -refine
+$ muscle -in viral.msa -out viral.afa
 $ trimal -in viral.msa -out viral.afa -automated1 -keepseqs # or not keep seqs
 
 $ iqtree -s viral.afa -bb 1000 -m MFP 
@@ -192,7 +192,7 @@ $ raxml-ng --search1 --msa viral.msa --model GTR+G --prefix T4 --threads 1
 # make a tree with 50 random starting+most pasimonious trees, with 2000 rounds of bootstrapping 
 $ raxml-ng --all --msa viral.msa --model GTR+G --prefix T5 --threads 1 --tree pars{50},rand{50} --bs-trees 2000
 ```
-7b. Because we are using a multi gene tree, genes can mutate and different rates #biology. Each gene may have mutations specific to them, therefore if we use the same model for all genes, this may be incorrect. To get around this, we partition up an MSA by genes, and run a model on each, combining the results after. IMPORTANT: This does not affect the structure of the tree drastically (if at all) so is not recomended, but I have included this just in case. To do this, you need to make a file like below. You may need to do some re-jiggling of the numbers if your MSA file has been trimmed.
+7b. Because we are using a multi gene tree, genes can mutate and different rates #biology. Each gene may have mutations specific to them, therefore if we use the same model for all genes, this may be incorrect. To get around this, we partition up an MSA by genes, and run a model on each, combining the results after. **IMPORTANT:** This does not affect the structure of the tree drastically (if at all) so is not recomended, but I have included this just in case. To do this, you need to make a file like below. You may need to do some re-jiggling of the numbers if your MSA file has been trimmed. **IMPORTANT:** If you are making a tree of organisms that are very closely related, you need the dev verion of [raxml-ng](https://github.com/amkozlov/raxml-ng/wiki/Installation#building-development-branch) 
 
 ```
 $ for i in *_trm_final.afa; do echo $i $(grep -v ">" $i | awk 'NR%2==0' | head -n 1 | wc -c); done
@@ -219,7 +219,7 @@ LG+G8+F, tube=2330-2463
 ```
 
 ```
-$ raxml-ng --all --msa T1.raxml.reduced.phy --model viral.part --prefix PARTITION_MODEL --threads 16 --tree pars{50},rand{50} --bs-trees 1000
+$ raxml-ng --all --msa viral.afa --model viral.part --prefix PARTITION_MODEL --threads 16 --tree pars{50},rand{50} --bs-trees 1000
 ```
 If you want to learn more about the options for RAxML, I highly recomend their [tutorial](https://github.com/amkozlov/raxml-ng/wiki/Tutorial)
 
