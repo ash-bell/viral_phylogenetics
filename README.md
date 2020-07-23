@@ -1,16 +1,16 @@
 # Viral Phylogeny
 ---
-Without a set of common genes shared between all viruses, it becomes difficult to deduce phylogeny of viruses. Other method of gene-sharing maps exist to combat this problem and are preferred. However, if you would like a classic tree, you can use this instead. This method uses a series of custom genes that the user selects to base a phylogenetic tree on. 
+Without a set of common genes shared between all viruses, it becomes difficult to deduce phylogeny of viruses. Other method of gene-sharing maps exist to combat this problem and are preferred. However, if you would like a classic tree, you can use this instead. This method uses a series of custom genes that the user selects to base a phylogenetic tree on.
 
 ## Before you start:
 ---
-*   [HMMER](http://hmmer.org/) installed `conda install -c bioconda hmmer` 
+*   [HMMER](http://hmmer.org/) installed `conda install -c bioconda hmmer`
 *   [MUSCLE](https://drive5.com/muscle/) installed `conda install -c bioconda muscle`
 *   [trimal](http://trimal.cgenomics.org/) installed `conda install -c bioconda trimal`
 *   [raxml-ng](https://github.com/amkozlov/raxml-ng) installed if you want to make a phylogenetic tree with it `conda install -c bioconda raxml-ng`
 
 ## Files:
-*   all_gene_calls.faa --> file of all my phage genomes gene calls as amimoacids
+*   all_gene_calls.faa --> file of all my phage genomes gene calls as amimo acids
 *   I like to genecall them with glimmer3 and use prodigal to convert the nuclotides to amino acids
 
 ```
@@ -31,7 +31,7 @@ $ rm run3* FINAL*
 
 This should result in a file that looks like this
 ```
-$ cat all_SAR11_phages.fna
+$ cat all_SAR11_phages.faa
 
 >Aegir_VP1_000000000001_1 # 1 # 2286 # 1 # ID=1_1;partial=11;start_type=Edge;rbs_motif=None;rbs_spacer=None;gc_cont=0.287
 MLTETLSKLETLGPVGIKIRSIMNERYDFLNKESNGPLKSGIVRMIDKHKIDYNMMIQLSYSIVATGTTEGQNLIQLAIAIGNRIRNYYKLPTKAELDLRLGVFVLNAYALNNMLIIKLVNDFKSFNKAKTVYKVYMGYNRSDMRKLMKEFNEVHDPFKPLFTKAPEWEFGTVLNPNGESIKLIKQSKIDTIARINKHNTPIVLNATNKKQAVAFYVNPEVYEIYKWALQTNQHCFEHNSVDTIAKERKEAKKAEALQVLKATELYVGKKFYQQYTCDSRGRFYPLSAYLNELNSDNAKGMLSFFEGKPLGNNGKAQLFHHIANMWGEDKLSHADRVKFVEDNYYEFVTYGSKPKDARGWMQAAEPIQFLSAVIELAKLDKHFVANGTVEDFISHTICYRDGSNNGLQWLFSLVKDNKNGHLVNIKPTTDNKPGDMYNHVAVSVKDIMHNKAKEEDNLSLDYYNLYFKSIEKIRNRWRIAELNNDKNVENKKRLIKWYQKRYRTELKLTDIIYWDKAKFTIKEWRKIVKRNVMTYGYSATKQGMGEQIIQDTRDIDNVYLSNKQHSAARALGSLVYTTIETEFPEVAAAMKLFKDNCAAYMKKHNKQYSHNTLISNFPFTQHYVKYKSARVKLTDGLYIMNNDKSFKWVNRVDFVIKTELPILNIGKAKAAISPNSIHNLDSLHLMLVIDECDFDIVSAHDSYGAHACNVNMMQKVIRSQFKRIIDANPLQHNLNETGNLVPMIKQGQLDSSEILKSEFAFA
@@ -40,6 +40,38 @@ MFDKYVYPILEKIGEGIEKIYWFCSNNKQEVTWFSFGFIVCALINLII
 ```
 
 *   Gene called your organisms and BLAST them against a database to get an annotated gene function for each. Then select genes that are specific to your taxa of interest and find them within your annotations. For example, for a viral phlogenetics I chose capsid, DNA polymerase, exonuclease, endonuclease, helicase, head-tail-connector and RNA polymerase. I like to upload my files to [eggnog-mapper](http://eggnog-mapper.embl.de/).
+
+* If you don't want to do this, you can cluster your genes using an iterative hmmscan (PSI-BLAST like), which groups similar protein calls together. Then you could pick the top 10 biggest clusters or only include genes that are present in at least 50% of all viruses.
+
+
+To do this, using your concatinated proteins file, reformat it so that the FASTA goes from a multi line fasta to a single line fasta with this `awk` script.
+```
+awk '/^>/ { if(NR>1) print "";  printf("%s\n",$0); next; } { printf("%s",$0);}  END {printf("\n");}' < all_SAR11_phages.faa > new_db.faa
+```
+Then for every entry (protein sequence) in the database, we use `jackhmmer`, first searches for simular sequences within out database using `nhmmer`. Any simular sequences are concatinated together to make a new HMM that is used to search the database again to enlarge the cluster. This is repeated until no new sequences are added to the cluster.
+
+We then remove the clustered sequences from the database so we don't search for the sequences already assigned to a cluster. This also rapidly speeds up the search. (45k protein sequences took ~15 mins on 8 threads for me without cluster removal).
+```
+mkdir outdir
+
+
+for i in $(grep ">" new_db.faa | sed 's/>//g; s/[[:space:]].*//g'); do
+head -n 2 new_db.faa | jackhmmer --tblout jkhmr.tbl --notextw --cpu 2 -N 10 --incE 0.000001 - new_db.faa;
+grep -v "^#" jkhmr.tbl | tr -s ' ' | cut -d " " -f1,19- | grep -f - -A 1 new_db.faa | sed "/^--$/d" - > outdir/${i}.clstr;
+cat outdir/${i}.clstr | grep -v -f - new_db.faa > tmp.faa;
+mv tmp.faa new_db.faa;
+done
+```
+Lastly, I remove any clusters of small sizes (I actually move them to outdir/remove so you retain the sequences just in case). I chose to remove any cluster that does not include at least 50% of the number viruses tested (48/2=24, **BUT** each entry includes a FASTA header and sequences so 24*2=48).
+
+```
+mkdir outdir/remove
+
+find ./outdir/*.clstr -type f -exec awk -v x=48 'NR==x{exit 1}' {} \; -exec mv {} outdir/remove/ \;
+```
+Now within your outdir you have protein clusters and you can skip to tutorial step 2
+
+
 
 ## Tutorial
 ---
@@ -120,7 +152,7 @@ HMM          A        C        D        E        F        G        H        I   
 [...]
 ```
 
-5. Now we want an MSA of all the genes against of the genomes. This is done using `hmmalign` which extracts the region of the genome that matches the HMM model. 
+5. Now we want an MSA of all the genes against of the genomes. This is done using `hmmalign` which extracts the region of the genome that matches the HMM model.
 **Important:** The HMM must be run against all of the genomes one by one, not the other way around. I.e capsid.hmm needs to be run against phage_1 phage_2 before head_tail_connector.hmm is run against phage 1 and phage_2. Otherwise you will have and MSA with an unequal length as it needs to include insertion/delation events in all tested species.
 
     For every hmm model I have created in my working directory, run `hmmalign` and only include the location of the genome that my HMM matches `(--trim)` and output this in the Pfam MSA format with the name being `capsid_genes_global.msa`.
@@ -164,20 +196,20 @@ DKSTDDVRPSWLPEKFKSAEDMAKAYSEL-EKKQSQMRADAEAGEGMDKFYTEYQDKGELKIILDLETNGFLVIHCIVCK
 [...]
 ```
 
-6. Check the MSA file is formatted correctly and remove duplicate phages if you wish using RAxML. Follow the onscreen suggestions and if you're happy with your MSA file (Or new one as I have used) you can start making your phylogenetic tree. 
+6. Check the MSA file is formatted correctly and remove duplicate phages if you wish using RAxML. Follow the onscreen suggestions and if you're happy with your MSA file (Or new one as I have used) you can start making your phylogenetic tree.
 
 ```
 $ raxml-ng --check --msa viral.msa --model LG+G8+F --prefix T1 --data-type AA
 $ raxml-ng --parse --msa viral.msa --model LG+G8+F --prefix T2 --data-type AA
 ```
 
-6b. Other alternatives include `muscle` which can trim and refine your MSA or you can use `trimal`. You could also use IQ-TREE to make your phylogenetic tree. 
+6b. Other alternatives include `muscle` which can trim and refine your MSA or you can use `trimal`. You could also use IQ-TREE to make your phylogenetic tree.
 
 ```
 $ muscle -in viral.msa -out viral.afa
 $ trimal -in viral.msa -out viral.afa -automated1 -keepseqs # or not keep seqs
 
-$ iqtree -s viral.afa -bb 1000 -m MFP 
+$ iqtree -s viral.afa -bb 1000 -m MFP
 ```
 7. Lets make the tree with raxml-ng. Here are some options:
 The tree you should use should be under {prefix}.raxml.support
@@ -187,16 +219,16 @@ The tree you should use should be under {prefix}.raxml.support
 $ raxml-ng --all --msa viral.msa --model GTR+G --prefix T3 --threads 1
 
 # make a quick tree to check its rough structure
-$ raxml-ng --search1 --msa viral.msa --model GTR+G --prefix T4 --threads 1 
+$ raxml-ng --search1 --msa viral.msa --model GTR+G --prefix T4 --threads 1
 
-# make a tree with 50 random starting+most pasimonious trees, with 2000 rounds of bootstrapping 
+# make a tree with 50 random starting+most pasimonious trees, with 2000 rounds of bootstrapping
 $ raxml-ng --all --msa viral.msa --model GTR+G --prefix T5 --threads 1 --tree pars{50},rand{50} --bs-trees 2000
 ```
 After the tree has been compiled, I would recomend [iTOL](https://itol.embl.de/) to view and edit the tree. Here is an [example](https://github.com/ash-bell/viral_phylogenetics/blob/master/B5Lajw929RWmq9gODup2XQ.png) to how it should look.
 
 ---
 
-7b. Because we are using a multi gene tree, genes can mutate and different rates #biology. Each gene may have mutations specific to them, therefore if we use the same model for all genes, this may be incorrect. To get around this, we partition up an MSA by genes, and run a model on each, combining the results after. **IMPORTANT:** This does not affect the structure of the tree drastically (if at all) so is not recomended, but I have included this just in case. To do this, you need to make a file like below. You may need to do some re-jiggling of the numbers if your MSA file has been trimmed. **IMPORTANT:** If you are making a tree of organisms that are very closely related, you need the dev verion of [raxml-ng](https://github.com/amkozlov/raxml-ng/wiki/Installation#building-development-branch) 
+7b. Because we are using a multi gene tree, genes can mutate and different rates #biology. Each gene may have mutations specific to them, therefore if we use the same model for all genes, this may be incorrect. To get around this, we partition up an MSA by genes, and run a model on each, combining the results after. **IMPORTANT:** This does not affect the structure of the tree drastically (if at all) so is not recomended, but I have included this just in case. To do this, you need to make a file like below. You may need to do some re-jiggling of the numbers if your MSA file has been trimmed. **IMPORTANT:** If you are making a tree of organisms that are very closely related, you need the dev verion of [raxml-ng](https://github.com/amkozlov/raxml-ng/wiki/Installation#building-development-branch)
 
 ```
 $ for i in *_trm_final.afa; do echo $i $(grep -v ">" $i | awk 'NR%2==0' | head -n 1 | wc -c); done
@@ -227,4 +259,4 @@ $ raxml-ng --all --msa viral.afa --model viral.part --prefix PARTITION_MODEL --t
 ```
 If you want to learn more about the options for RAxML, I highly recomend their [tutorial](https://github.com/amkozlov/raxml-ng/wiki/Tutorial)
 
-**NOTE:** If any of the raxml-ng commands fail, rerun the command, they have [checkpoints](https://github.com/amkozlov/raxml-ng/wiki/Advanced-Tutorial#checkpointing) and so your progess won't be lost. 
+**NOTE:** If any of the raxml-ng commands fail, rerun the command, they have [checkpoints](https://github.com/amkozlov/raxml-ng/wiki/Advanced-Tutorial#checkpointing) and so your progess won't be lost.
